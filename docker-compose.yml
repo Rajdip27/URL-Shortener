@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  # API Service
+  api:
+    build:
+      context: ..
+      dockerfile: src/Api/UrlShortener.Api/Dockerfile
+    container_name: urlshortener-api
+    ports:
+      - "5000:80"
+      - "5001:443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Server=db;Database=UrlShortenerDb;User=sa;Password=@Passw0rd;TrustServerCertificate=True;
+      - Redis__Configuration=redis:6379
+    volumes:
+      - ./src:/app/src
+      - ~/.nuget/packages:/root/.nuget/packages:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Redis Service
+  redis:
+    image: redis:alpine
+    container_name: urlshortener-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # SQL Server Service
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: urlshortener-db
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=@Passw0rd
+      - MSSQL_PID=Express
+    ports:
+      - "1433:1433"
+    volumes:
+      - sql_data:/var/opt/mssql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "@Passw0rd", "-Q", "SELECT 1"]
+      interval: 10s
+      retries: 10
+      start_period: 10s
+      timeout: 3s
+
+# Volumes
+volumes:
+  sql_data:
+  redis_data:
+
+# Networks
+networks:
+  app-network:
+    driver: bridge
